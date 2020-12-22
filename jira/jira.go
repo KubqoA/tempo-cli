@@ -24,25 +24,20 @@ type JiraUser struct {
 	AccountId string
 }
 
-// Issue
+// Issue data parsed from Jira API
 type Issue struct {
-	Key string
-	Url string `json:"self"`
+	Key    string
+	Url    string `json:"self"`
 	Fields struct {
 		Summary string
 	}
 }
 
 // GetCurrentUser returns the JiraUser user representation from the API
-func (j JiraAPI) GetCurrentUser() (user JiraUser, err error) {
-	request, err := http.NewRequest(http.MethodGet, j.getApiEndpoint("myself"), nil)
+func (api JiraAPI) GetCurrentUser() (user JiraUser, err error) {
+	response, err := api.request("myself")
 	if err != nil {
-		return 
-	}
-	request.SetBasicAuth(j.Email, j.ApiToken)
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return 
+		return
 	}
 	defer response.Body.Close()
 	dec := json.NewDecoder(response.Body)
@@ -50,45 +45,39 @@ func (j JiraAPI) GetCurrentUser() (user JiraUser, err error) {
 	return
 }
 
-func (j JiraAPI) GetWorkableIssues() (issues []Issue, err error) {	
-	n, err := j.getTotalNumberOfIssues()
+// GetWorkableIssues returns all issues the user can work on
+func (api JiraAPI) GetWorkableIssues() (issues []Issue, err error) {
+	n, err := api.getTotalNumberOfIssues()
 	if err != nil {
-		return 
+		return
 	}
-	issuesChan := make(chan []Issue)
-	errorChan := make(chan error)
-	for i := 0; i < n; i+=100 {
-		go j.getIssues(i, issuesChan, errorChan)
+	issuesChannel := make(chan []Issue)
+	errorChannel := make(chan error)
+	for i := 0; i < n; i += 100 {
+		go api.getIssues(i, issuesChannel, errorChannel)
 	}
-	for i := 0; i < n; i+=100 {
-		if err = <-errorChan; err != nil {
+	for i := 0; i < n; i += 100 {
+		if err = <-errorChannel; err != nil {
 			return
 		}
-		issues = append(issues, <-issuesChan...)
+		issues = append(issues, <-issuesChannel...)
 	}
 	return
 }
 
-func (j JiraAPI) getIssues(startAt int, issues chan []Issue, errors chan error) {
+func (api JiraAPI) getIssues(startAt int, issues chan []Issue, errors chan error) {
 	v := url.Values{}
 	v.Set("jql", `project in projectsWhereUserHasPermission("Work on issues")`)
 	v.Set("fields", "summary")
 	v.Set("maxResults", "100")
-	request, err := http.NewRequest(http.MethodGet, j.getApiEndpoint("search?"+v.Encode()), nil)
+	response, err := api.request("search?" + v.Encode())
 	if err != nil {
 		errors <- err
-		return 
-	}
-	request.SetBasicAuth(j.Email, j.ApiToken)
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		errors <- err
-		return 
+		return
 	}
 	defer response.Body.Close()
-	var jsonResponse struct {
-		Issues []Issue
-	}
+
+	var jsonResponse struct{ Issues []Issue }
 	dec := json.NewDecoder(response.Body)
 	errors <- dec.Decode(&jsonResponse)
 	issues <- jsonResponse.Issues
@@ -99,14 +88,9 @@ func (j JiraAPI) getTotalNumberOfIssues() (n int, err error) {
 	v := url.Values{}
 	v.Set("jql", `project in projectsWhereUserHasPermission("Work on issues")`)
 	v.Set("maxResults", "0")
-	request, err := http.NewRequest(http.MethodGet, j.getApiEndpoint("search?"+v.Encode()), nil)
+	response, err := j.request("search?" + v.Encode())
 	if err != nil {
-		return 
-	}
-	request.SetBasicAuth(j.Email, j.ApiToken)
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return 
+		return
 	}
 	defer response.Body.Close()
 	var header struct {
@@ -115,6 +99,19 @@ func (j JiraAPI) getTotalNumberOfIssues() (n int, err error) {
 	dec := json.NewDecoder(response.Body)
 	err = dec.Decode(&header)
 	n = header.Total
+	return
+}
+
+func (j JiraAPI) request(endpoint string) (response *http.Response, err error) {
+	request, err := http.NewRequest(http.MethodGet, j.getApiEndpoint(endpoint), nil)
+	if err != nil {
+		return
+	}
+	request.SetBasicAuth(j.Email, j.ApiToken)
+	response, err = http.DefaultClient.Do(request)
+	if err != nil {
+		return
+	}
 	return
 }
 

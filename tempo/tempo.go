@@ -2,11 +2,11 @@ package tempo
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/fatih/color"
 	"github.com/skratchdot/open-golang/open"
 	"net/http"
 	"net/url"
-	"encoding/json"	
 	"time"
 )
 
@@ -35,18 +35,18 @@ type TempoAPI struct {
 
 // Credentials for interacting with the Tempo API
 type Credentials struct {
-	AccessToken string `json:"access_token"`
+	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
-	ExpiresIn int `json:"expires_in"`
+	ExpiresIn    int    `json:"expires_in"`
 }
 
 // Worklog obtained or sent to the Tempo API
 type Worklog struct {
-	IssueKey string
+	IssueKey         string
 	TimeSpentSeconds int
-	StartDate time.Time
-	StartTime time.Time
-	AuthorAccountId string
+	StartDate        time.Time
+	StartTime        time.Time
+	AuthorAccountId  string
 
 	// Optional
 	Description string
@@ -61,12 +61,12 @@ func (t TempoAPI) Login() (credentials Credentials, err error) {
 	}
 
 	response, err := http.PostForm("https://api.tempo.io/oauth/token/", urlValues(map[string]string{
-		"grant_type": "authorization_code",
-		"client_id": t.ClientId,
+		"grant_type":    "authorization_code",
+		"client_id":     t.ClientId,
 		"client_secret": t.ClientSecret,
-		"redirect_uri": t.redirectUri(),
-		"code": authorizationCode,
-		}))
+		"redirect_uri":  t.redirectUri(),
+		"code":          authorizationCode,
+	}))
 	if err != nil {
 		return
 	}
@@ -80,12 +80,12 @@ func (t TempoAPI) Login() (credentials Credentials, err error) {
 // access token for the Tempo API
 func (t TempoAPI) Refresh(c Credentials) (credentials Credentials, err error) {
 	response, err := http.PostForm("https://api.tempo.io/oauth/token/", urlValues(map[string]string{
-		"grant_type": "refresh_token",
-		"client_id": t.ClientId,
+		"grant_type":    "refresh_token",
+		"client_id":     t.ClientId,
 		"client_secret": t.ClientSecret,
-		"redirect_uri": t.redirectUri(),
+		"redirect_uri":  t.redirectUri(),
 		"refresh_token": c.RefreshToken,
-		}))
+	}))
 	if err != nil {
 		return
 	}
@@ -142,5 +142,5 @@ func (t TempoAPI) redirectUri() string {
 }
 
 func (t TempoAPI) authUrl() string {
-	return t.JiraUrl + "/plugins/servlet/ac/io.tempo.jira/oauth-authorize/?client_id="+t.ClientId+"&redirect_uri="+t.redirectUri()+"&access_type=tenant_user"
+	return t.JiraUrl + "/plugins/servlet/ac/io.tempo.jira/oauth-authorize/?client_id=" + t.ClientId + "&redirect_uri=" + t.redirectUri() + "&access_type=tenant_user"
 }
