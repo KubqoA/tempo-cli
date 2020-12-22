@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"encoding/json"	
+	"time"
 )
 
 // TempoAPI defines parameters for connecting to the Tempo API
@@ -37,6 +38,18 @@ type Credentials struct {
 	AccessToken string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn int `json:"expires_in"`
+}
+
+// Worklog obtained or sent to the Tempo API
+type Worklog struct {
+	IssueKey string
+	TimeSpentSeconds int
+	StartDate time.Time
+	StartTime time.Time
+	AuthorAccountId string
+
+	// Optional
+	Description string
 }
 
 // Login opens the authorization url in the broswer, starts a temporary web
