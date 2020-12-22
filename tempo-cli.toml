@@ -1,0 +1,9 @@
+jiraUrl = "https://jira-cloud-instance-name.atlassian.net"
+
+[tempo]
+clientId     = ""
+clientSecret = ""
+
+[jira]
+email    = "john.doe@example.com"
+apiToken = ""
