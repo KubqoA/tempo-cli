@@ -1,15 +1,13 @@
 package main
 
 import (
-	"errors"
 	"flag"
-	"fmt"
-	"github.com/BurntSushi/toml"
+	"github.com/fatih/color"
+	"github.com/kubqoa/tempo-cli/cmd"
+	"github.com/kubqoa/tempo-cli/config"
 	"github.com/kubqoa/tempo-cli/jira"
 	"github.com/kubqoa/tempo-cli/tempo"
 	"os"
-	"regexp"
-	"time"
 )
 
 var (
@@ -18,108 +16,39 @@ var (
 	configFile = flag.String("config", func() string { dir, _ := os.UserConfigDir(); return dir + "/tempo-cli.toml" }(), "set the path to the config file")
 )
 
-type config struct {
-	JiraUrl string
-	Tempo   struct {
-		ClientId     string
-		ClientSecret string
-	}
-	Jira struct {
-		Email    string
-		ApiToken string
-	}
-	Credentials tempo.Credentials
-}
-
 func main() {
-	var conf config
 	flag.Parse()
 
-	if _, err := toml.DecodeFile(*configFile, &conf); err != nil {
-		fmt.Println("error parsing configuration file:", err)
-		return
-	}
-
-	if err := conf.validateConfig(); err != nil {
-		fmt.Println("invalid configuration file:", err)
+	config, err := config.MakeConfig(*configFile)
+	if err != nil {
+		color.Red("Error parsing configuration file: %v", err)
 		return
 	}
 
 	jiraAPI := jira.JiraAPI{
-		JiraUrl:  conf.JiraUrl,
-		Email:    conf.Jira.Email,
-		ApiToken: conf.Jira.ApiToken,
+		JiraUrl:  config.JiraUrl,
+		Email:    config.Jira.Email,
+		ApiToken: config.Jira.ApiToken,
 	}
 
 	tempoAPI := tempo.TempoAPI{
-		ClientId:     conf.Tempo.ClientId,
-		ClientSecret: conf.Tempo.ClientSecret,
-		JiraUrl:      conf.JiraUrl,
+		ClientId:     config.Tempo.ClientId,
+		ClientSecret: config.Tempo.ClientSecret,
+		JiraUrl:      config.JiraUrl,
 	}
 
 	if *login {
-		credentials, err := tempoAPI.Login()
-		if err != nil {
-			fmt.Println("there was an error logging in:", err)
-			return 
-		}
-
-		conf.Credentials = credentials
-		conf.writeConfig(*configFile)
-
+		cmd.Login(tempoAPI, config)
 		return
 	}
 
-	var c tempo.Credentials
-
-	if conf.Credentials == c {
-		fmt.Println("you need to login first")
-		return
+	if err := config.ValidateCredentials(); err != nil {
+		color.Red("%v", err)
 	}
 
-	if conf.Credentials.ExpiresAt.Before(time.Now()) {
-		fmt.Println("We need to refresh the Tempo access token. Hang on please.")
-		credentials, err := tempoAPI.Refresh(conf.Credentials)
-		if err != nil {
-			fmt.Println("there was an error refreshing the access token", err)
-			return 
-		}
-		conf.Credentials = credentials
-		conf.writeConfig(*configFile)
-	}
+	cmd.Renew(tempoAPI, config)
 
-	fmt.Println(jiraAPI.GetCurrentUser())
-}
+	user, _ := jiraAPI.GetCurrentUser()
 
-func (c config) writeConfig(path string) {
-	file, err := os.OpenFile(path, os.O_WRONLY, 0660)
-	if err != nil {
-		fmt.Println("there was an error opening the configuration file for writing", err)
-		return
-	}
-	err = toml.NewEncoder(file).Encode(c)
-	if err != nil {
-		fmt.Println("there was an error writing to the configuration file", err)
-		return
-	}
-	return
-}
-
-func (c config) validateConfig() error {
-	if !regexp.MustCompile(`http[s]?://.*`).MatchString(c.JiraUrl) {
-		return errors.New("jiraUrl must be in format http(s)://url-of-jira")
-	}
-	if c.Tempo.ClientId == "" {
-		return errors.New("tempo.clientId must not be empty")
-	}
-	if c.Tempo.ClientSecret == "" {
-		return errors.New("tempo.clientSecret must not be empty")
-	}
-	if !regexp.MustCompile(`.*@.*`).MatchString(c.Jira.Email) {
-		return errors.New("jira.email is not a valid email")
-	}
-	if c.Jira.ApiToken == "" {
-		return errors.New("jira.apiToken must not be empty")
-	}
-	return nil
+	color.White("%v", user)
 }
