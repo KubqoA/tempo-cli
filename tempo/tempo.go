@@ -38,6 +38,7 @@ type Credentials struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int    `json:"expires_in"`
+	ExpiresAt	 time.Time
 }
 
 // Worklog obtained or sent to the Tempo API
@@ -73,6 +74,7 @@ func (t TempoAPI) Login() (credentials Credentials, err error) {
 	defer response.Body.Close()
 	dec := json.NewDecoder(response.Body)
 	err = dec.Decode(&credentials)
+	credentials.ExpiresAt = time.Now().Add(time.Second * time.Duration(credentials.ExpiresIn))
 	return
 }
 
@@ -92,6 +94,7 @@ func (t TempoAPI) Refresh(c Credentials) (credentials Credentials, err error) {
 	defer response.Body.Close()
 	dec := json.NewDecoder(response.Body)
 	err = dec.Decode(&credentials)
+	credentials.ExpiresAt = time.Now().Add(time.Second * time.Duration(credentials.ExpiresIn))
 	return
 }
 

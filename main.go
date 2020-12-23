@@ -4,15 +4,18 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"regexp"
 	"github.com/BurntSushi/toml"
 	"github.com/kubqoa/tempo-cli/jira"
 	"github.com/kubqoa/tempo-cli/tempo"
+	"os"
+	"regexp"
+	"time"
 )
 
 var (
-	login      = flag.Bool("login", false, "preform login to tempo")
-	configFile = flag.String("config", "~/.tempo-cli.toml", "set the path to the config file")
+	log        = flag.String("log", "", "log a new workklog to Tempo")
+	login      = flag.Bool("login", false, "preform login to Tempo")
+	configFile = flag.String("config", func() string { dir, _ := os.UserConfigDir(); return dir + "/tempo-cli.toml" }(), "set the path to the config file")
 )
 
 type config struct {
@@ -25,6 +28,7 @@ type config struct {
 		Email    string
 		ApiToken string
 	}
+	Credentials tempo.Credentials
 }
 
 func main() {
@@ -54,11 +58,51 @@ func main() {
 	}
 
 	if *login {
-		code, err := tempoAPI.Login()
-		fmt.Printf("got access token: %v with error %v\n", code.AccessToken, err)
-	} else {
-		fmt.Println(jiraAPI.GetCurrentUser())
+		credentials, err := tempoAPI.Login()
+		if err != nil {
+			fmt.Println("there was an error logging in:", err)
+			return 
+		}
+
+		conf.Credentials = credentials
+		conf.writeConfig(*configFile)
+
+		return
 	}
+
+	var c tempo.Credentials
+
+	if conf.Credentials == c {
+		fmt.Println("you need to login first")
+		return
+	}
+
+	if conf.Credentials.ExpiresAt.Before(time.Now()) {
+		fmt.Println("We need to refresh the Tempo access token. Hang on please.")
+		credentials, err := tempoAPI.Refresh(conf.Credentials)
+		if err != nil {
+			fmt.Println("there was an error refreshing the access token", err)
+			return 
+		}
+		conf.Credentials = credentials
+		conf.writeConfig(*configFile)
+	}
+
+	fmt.Println(jiraAPI.GetCurrentUser())
+}
+
+func (c config) writeConfig(path string) {
+	file, err := os.OpenFile(path, os.O_WRONLY, 0660)
+	if err != nil {
+		fmt.Println("there was an error opening the configuration file for writing", err)
+		return
+	}
+	err = toml.NewEncoder(file).Encode(c)
+	if err != nil {
+		fmt.Println("there was an error writing to the configuration file", err)
+		return
+	}
+	return
 }
 
 func (c config) validateConfig() error {
